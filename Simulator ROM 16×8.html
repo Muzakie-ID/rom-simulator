@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulator ROM 16×8</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: friendly lab-notebook, same pink-and-teal as the praktikum slide
+   IDEA: the ROM block diagram itself, wired live — the chip is the calculator
+   PICTURE: decoder baris + 4×4 register array + decoder kolom + output buffer, lit by the address
+   COLOUR and TYPE: raspberry panel, teal accent, cyan for the active path; Fredoka titles, Nunito body, mono bits
+   LAYOUT: diagram left (large), result + steps right; stacks below 900px */
+:root{color-scheme:light dark;
+--bg:light-dark(#f6d3e1,#1f0b15);--panel:light-dark(#ad3d68,#4a1631);--panel2:light-dark(#c25582,#5e1d3f);
+--ink:light-dark(#3a0c22,#fbe7ef);--on:#fff;--soft:light-dark(#ffe9f2,#3a1227);
+--teal:#239a9c;--cyan:#56e6e2;--cell:light-dark(#fff,#fbe9f1);--cellInk:#5b1636;--tint:light-dark(#ffd5e6,#f6c4da)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Nunito,system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(20px,3.5vw,48px) max(4vw,14px);max-width:1280px;margin:auto}
+h1{font:700 clamp(30px,4.4vw,46px)/1.05 Fredoka,sans-serif;margin:0 0 6px;text-wrap:balance}
+.lead{margin:0 0 22px;max-width:68ch}
+.main{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:900px){.main{grid-template-columns:1fr}}
+.card{background:var(--panel);color:var(--on);border-radius:22px;padding:18px;box-shadow:0 10px 0 -4px rgba(80,10,40,.18)}
+.card h2{font:600 22px/1.1 Fredoka,sans-serif;margin:0 0 12px}
+.scroll{overflow-x:auto}
+.chip{display:grid;grid-template-columns:64px 84px repeat(4,minmax(62px,1fr)) 46px 92px;grid-template-rows:repeat(4,52px) 46px 64px;gap:8px;min-width:600px;font-family:Fredoka,sans-serif}
+.dec{background:var(--panel2);border-radius:12px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;font-weight:600;font-size:14px;line-height:1.2;padding:6px}
+.dec .outs{display:flex;gap:4px;margin-top:6px}
+.dec.v .outs{flex-direction:column}
+.o{font:700 12px 'JetBrains Mono',monospace;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.12)}
+.o.on{background:var(--cyan);color:#06393a}
+.reg{border:0;border-radius:10px;background:var(--cell);color:var(--cellInk);font:600 14px/1.1 Fredoka,sans-serif;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:background .15s,transform .15s}
+.reg small{font:700 13px 'JetBrains Mono',monospace;opacity:.7}
+.reg.line{background:var(--tint)}
+.reg.sel{background:var(--teal);color:#fff;transform:scale(1.05);box-shadow:0 0 0 3px var(--cyan)}
+.reg.sel small{opacity:1}
+.reg:focus-visible,.bit:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+.buf{grid-column:7;grid-row:1/5;border-radius:10px;background:#7a7a86;color:#fff;writing-mode:vertical-rl;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;transition:background .2s}
+.buf.on{background:var(--cyan);color:#06393a}
+.pins{grid-column:8;grid-row:1/5;display:flex;flex-direction:column;justify-content:space-between;padding:2px 0}
+.pin{display:flex;align-items:center;gap:6px;font:700 12px 'JetBrains Mono',monospace}
+.pin i{flex:1;height:2px;background:rgba(255,255,255,.35)}
+.pin b{width:22px;text-align:center;border-radius:5px;padding:1px 0;background:rgba(255,255,255,.12)}
+.pin.h b{background:var(--cyan);color:#06393a}.pin.z b{opacity:.5}
+.bit{border:0;border-radius:10px;cursor:pointer;font:700 16px 'JetBrains Mono',monospace;min-height:44px;min-width:44px;background:#fff;color:var(--cellInk)}
+.bit.h{background:var(--cyan);color:#06393a}
+.lbl{font:600 13px Fredoka,sans-serif;display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:center}
+.ctl{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:end}
+.ctl label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:800}
+input[type=text]{font:500 16px 'JetBrains Mono',monospace;padding:10px 12px;border-radius:10px;border:0;width:170px;min-height:44px;color:var(--cellInk)}
+button.btn{min-height:44px;padding:0 16px;border-radius:12px;border:0;font:600 15px Fredoka,sans-serif;cursor:pointer;background:var(--teal);color:#fff}
+button.btn.ghost{background:rgba(255,255,255,.16)}
+.big{font:700 clamp(52px,8vw,84px)/1 Fredoka,sans-serif;margin:4px 0}
+.big sub{font-size:.35em}
+.big.z{color:#ffd0e0;font-size:clamp(40px,6vw,60px)}
+.bits{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px;margin:10px 0 4px}
+.bits .bit{min-width:0;font-size:15px}
+.bits span{font:700 11px 'JetBrains Mono',monospace;text-align:center;opacity:.8}
+.hint{font-size:13px;opacity:.85;margin:4px 0 0}
+ol{margin:0;padding-left:22px}ol li{margin:6px 0}
+code{font-family:'JetBrains Mono',monospace;background:rgba(255,255,255,.16);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
+.sw{display:flex;gap:8px;flex-wrap:wrap}
+.tog{min-height:44px;padding:0 14px;border-radius:12px;border:0;font:600 15px Fredoka,sans-serif;cursor:pointer;background:#fff;color:var(--cellInk)}
+.tog.low{background:var(--cyan);color:#06393a}
+.foot{font-size:13px;margin-top:16px;opacity:.8}
+.right{display:grid;gap:18px}
+</style>
+</head>
+<body>
+<div class="band">
+  <h1>Simulator ROM 16 × 8</h1>
+  <p class="lead">Pilih alamat A3–A0 (klik bit, klik register, atau ketik), atur CS dan OE (aktif LOW), lalu lihat baris, kolom, register yang terpilih dan data yang keluar di D7–D0.</p>
+
+  <div class="main">
+    <section class="card">
+      <h2>Arsitektur ROM</h2>
+      <div class="scroll">
+        <div class="chip" id="chip"></div>
+      </div>
+      <div class="ctl">
+        <label for="addr">Alamat (biner, desimal, atau heksa)
+          <input type="text" id="addr" autocomplete="off" placeholder="1101, 13, atau D">
+        </label>
+        <button class="btn ghost" id="prev" aria-label="Alamat sebelumnya">◀ −1</button>
+        <button class="btn ghost" id="next" aria-label="Alamat berikutnya">+1 ▶</button>
+      </div>
+      <p class="hint" id="addrMsg">Contoh: ketik 1101 untuk register 13.</p>
+    </section>
+
+    <div class="right">
+      <section class="card" aria-live="polite">
+        <h2>Keluaran D7–D0</h2>
+        <div class="big" id="big"></div>
+        <div class="bits" id="bits"></div>
+        <p class="hint">Klik bit di atas untuk memprogram isi register yang terpilih.</p>
+        <div class="ctl">
+          <label for="hex">Isi register (heksa)
+            <input type="text" id="hex" maxlength="2" autocomplete="off">
+          </label>
+          <div class="sw">
+            <button class="tog" id="cs"></button>
+            <button class="tog" id="oe"></button>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Langkah perhitungan</h2>
+        <ol id="steps"></ol>
+        <div class="ctl">
+          <button class="btn ghost" id="rand">Isi acak</button>
+          <button class="btn ghost" id="reset">Kembalikan contoh</button>
+        </div>
+        <p class="foot">Isi ROM awal adalah data contoh (Reg 13 = ED₁₆ seperti di slide).</p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+{
+const SAMPLE=[0x3C,0x81,0x5A,0x0F,0xA5,0x42,0x99,0x18,0x7E,0xC3,0x24,0x66,0xF0,0xED,0x01,0xBD];
+let mem=SAMPLE.slice(),addr=13,cs=0,oe=0;
+try{const s=JSON.parse(localStorage.getItem('rom16x8')||'null');if(Array.isArray(s)&&s.length===16)mem=s.map(v=>v&255)}catch(e){}
+const save=()=>{try{localStorage.setItem('rom16x8',JSON.stringify(mem))}catch(e){}};
+const $=id=>document.getElementById(id);
+const b=(n,w)=>n.toString(2).padStart(w,'0');
+const hx=n=>n.toString(16).toUpperCase().padStart(2,'0');
+const chip=$('chip');
+
+function buildChip(){
+  let h='';
+  h+=`<div class="lbl" style="grid-column:1;grid-row:2">A1<button class="bit" data-b="1"></button></div>`;
+  h+=`<div class="lbl" style="grid-column:1;grid-row:3">A0<button class="bit" data-b="0"></button></div>`;
+  h+=`<div class="dec v" style="grid-column:2;grid-row:1/5">Decoder baris<br>1-of-4<div class="outs" id="rowOuts"></div></div>`;
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){const n=c*4+r;
+    h+=`<button class="reg" id="r${n}" data-n="${n}" style="grid-column:${c+3};grid-row:${r+1}">Reg ${n}<small></small></button>`}
+  h+=`<div class="buf" id="buf">Output buffer</div><div class="pins" id="pins"></div>`;
+  h+=`<div class="dec" style="grid-column:3/7;grid-row:5;flex-direction:row;gap:10px">Decoder kolom 1-of-4<div class="outs" id="colOuts"></div></div>`;
+  h+=`<div class="lbl" style="grid-column:4;grid-row:6">A3<button class="bit" data-b="3"></button></div>`;
+  h+=`<div class="lbl" style="grid-column:5;grid-row:6">A2<button class="bit" data-b="2"></button></div>`;
+  h+=`<div class="lbl" style="grid-column:7/9;grid-row:6">CS · OE aktif LOW<span id="ctrlTxt"></span></div>`;
+  chip.innerHTML=h;
+}
+
+function render(){
+  const row=addr&3,col=addr>>2,data=mem[addr],out=cs===0&&oe===0;
+  chip.querySelectorAll('.bit[data-b]').forEach(e=>{const v=(addr>>+e.dataset.b)&1;e.textContent=v;e.classList.toggle('h',!!v);e.setAttribute('aria-label','Bit A'+e.dataset.b+' = '+v)});
+  for(let n=0;n<16;n++){const e=$('r'+n);e.querySelector('small').textContent=hx(mem[n]);
+    e.classList.toggle('sel',n===addr);e.classList.toggle('line',n!==addr&&((n&3)===row||(n>>2)===col))}
+  $('rowOuts').innerHTML=[0,1,2,3].map(i=>`<span class="o${i===row?' on':''}">B${i}</span>`).join('');
+  $('colOuts').innerHTML=[0,1,2,3].map(i=>`<span class="o${i===col?' on':''}">K${i}</span>`).join('');
+  $('buf').classList.toggle('on',out);
+  $('pins').innerHTML=[7,6,5,4,3,2,1,0].map(i=>{const v=(data>>i)&1;const cls=out?(v?' h':''):' z';
+    return `<div class="pin${cls}"><i></i><b>${out?v:'Z'}</b>D${i}</div>`}).join('');
+  $('ctrlTxt').textContent=`CS=${cs} OE=${oe}`;
+  $('cs').textContent=`CS = ${cs} ${cs?'(nonaktif)':'(aktif)'}`;$('cs').classList.toggle('low',!cs);
+  $('oe').textContent=`OE = ${oe} ${oe?'(nonaktif)':'(aktif)'}`;$('oe').classList.toggle('low',!oe);
+  const big=$('big');
+  if(out){big.className='big';big.innerHTML=`${hx(data)}<sub>16</sub>`}
+  else{big.className='big z';big.textContent='Hi-Z (terputus)'}
+  $('bits').innerHTML=[7,6,5,4,3,2,1,0].map(i=>{const v=(data>>i)&1;return `<button class="bit${v?' h':''}" data-d="${i}" aria-label="D${i} = ${v}">${v}</button>`}).join('')+
+    [7,6,5,4,3,2,1,0].map(i=>`<span>D${i}</span>`).join('');
+  if(document.activeElement!==$('hex'))$('hex').value=hx(data);
+  if(document.activeElement!==$('addr'))$('addr').value=b(addr,4);
+  const why=cs?'CS bernilai HIGH, chip tidak dipilih':'OE bernilai HIGH, output buffer tidak diaktifkan';
+  $('steps').innerHTML=[
+    `Alamat A3A2A1A0 = <code>${b(addr,4)}</code> (= ${addr}<sub>10</sub> = ${addr.toString(16).toUpperCase()}<sub>16</sub>).`,
+    `A1A0 = <code>${b(row,2)}</code> → decoder baris mengaktifkan <b>baris ${row}</b>.`,
+    `A3A2 = <code>${b(col,2)}</code> → decoder kolom mengaktifkan <b>kolom ${col}</b>.`,
+    `Register terpilih = 4 × kolom + baris = 4 × ${col} + ${row} = <b>Reg ${addr}</b>.`,
+    `Isi Reg ${addr} = <code>${b(data,8)}</code> = ${hx(data)}<sub>16</sub> = ${data}<sub>10</sub>.`,
+    out?`CS = 0 dan OE = 0 → output buffer meneruskan data, D7–D0 = <code>${b(data,8)}</code>.`
+       :`${why} → keluaran D7–D0 dalam keadaan <b>Hi-Z</b> (terputus).`
+  ].map(s=>`<li>${s}</li>`).join('');
+}
+
+function parseAddr(t){
+  t=t.trim();if(!t)return null;
+  if(/^[01]{4}$/.test(t))return parseInt(t,2);
+  if(/^0b[01]{1,4}$/i.test(t))return parseInt(t.slice(2),2);
+  if(/^0x[0-9a-f]$/i.test(t))return parseInt(t.slice(2),16);
+  if(/^\d{1,2}$/.test(t)){const n=+t;return n<=15?n:null}
+  if(/^[a-f]$/i.test(t))return parseInt(t,16);
+  return null;
+}
+
+chip.addEventListener('click',e=>{
+  const bit=e.target.closest('.bit[data-b]');if(bit){addr^=1<<+bit.dataset.b;render();return}
+  const reg=e.target.closest('.reg');if(reg){addr=+reg.dataset.n;render()}
+});
+$('bits').addEventListener('click',e=>{const t=e.target.closest('[data-d]');if(!t)return;mem[addr]^=1<<+t.dataset.d;save();render()});
+$('addr').addEventListener('input',e=>{const n=parseAddr(e.target.value);
+  if(n===null){$('addrMsg').textContent='Masukkan 4 bit biner (mis. 1101), desimal 0–15, atau heksa 0–F.';return}
+  addr=n;$('addrMsg').textContent=`Alamat ${b(n,4)} dipilih.`;render()});
+$('addr').addEventListener('blur',render);
+$('hex').addEventListener('input',e=>{const v=e.target.value.trim();if(/^[0-9a-f]{1,2}$/i.test(v)){mem[addr]=parseInt(v,16);save();render()}});
+$('hex').addEventListener('blur',render);
+$('cs').addEventListener('click',()=>{cs^=1;render()});
+$('oe').addEventListener('click',()=>{oe^=1;render()});
+$('prev').addEventListener('click',()=>{addr=(addr+15)%16;render()});
+$('next').addEventListener('click',()=>{addr=(addr+1)%16;render()});
+$('rand').addEventListener('click',()=>{mem=mem.map(()=>Math.floor(Math.random()*256));save();render()});
+$('reset').addEventListener('click',()=>{mem=SAMPLE.slice();addr=13;cs=0;oe=0;save();render()});
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;
+  if(e.key==='ArrowRight'){addr=(addr+1)%16;render()}else if(e.key==='ArrowLeft'){addr=(addr+15)%16;render()}});
+buildChip();render();
+}
+</script>
+</body>
+</html>
